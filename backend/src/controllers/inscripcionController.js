@@ -21,3 +21,15 @@ export const gestionarInscripcion = async (req, res) => {
     res.status(500).json({ msg: "Error al gestionar inscripción" });
   }
 };
+
+// controllers/inscripcionController.js
+export const listarInscripciones = async (req, res) => {
+  try {
+    const inscripciones = await Inscripcion.find()
+      .populate("alumno", "nombre email")
+      .populate("curso", "titulo");
+    res.json(inscripciones);
+  } catch (error) {
+    res.status(500).json({ msg: "Error al obtener inscripciones" });
+  }
+};

@@ -16,14 +16,12 @@ const app = express();
 // Middlewares
 app.use(cors());
 app.use(express.json()); // para leer JSON en requests
+app.use("/uploads", express.static("uploads"));
 
 // Conexión a MongoDB
-mongoose.connect(process.env.MONGO_URI, {
-  useNewUrlParser: true,
-  useUnifiedTopology: true,
-})
-.then(() => console.log("✅ MongoDB conectado"))
-.catch((err) => console.error("❌ Error MongoDB:", err));
+mongoose.connect(process.env.MONGO_URI)
+  .then(() => console.log("✅ MongoDB conectado"))
+  .catch((err) => console.error("❌ Error MongoDB:", err));
 
 // Rutas API
 app.use("/api/usuarios", usuarioRoutes);

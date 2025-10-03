@@ -34,8 +34,19 @@ export const login = async (req, res) => {
     if (!esValido) return res.status(400).json({ msg: "Credenciales inválidas" });
 
     const token = jwt.sign({ id: usuario._id }, process.env.JWT_SECRET, { expiresIn: "7d" });
-    res.json({ token, usuario });
+
+    // devolver solo lo necesario
+    res.json({
+      token,
+      usuario: {
+        _id: usuario._id,
+        nombre: usuario.nombre,
+        email: usuario.email,
+        rol: usuario.rol,   // 👈 este es clave para tu botón
+      },
+    });
   } catch (error) {
     res.status(500).json({ msg: "Error en el servidor" });
   }
 };
+
