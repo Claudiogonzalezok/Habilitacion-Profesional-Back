@@ -8,6 +8,8 @@ import usuarioRoutes from "./src/routes/usuarioRoutes.js";
 import cursoRoutes from "./src/routes/cursoRoutes.js";
 import claseRoutes from "./src/routes/claseRoutes.js";
 import inscripcionRoutes from "./src/routes/inscripcionRoutes.js";
+import examenRoutes from "./src/routes/examenRoutes.js";
+
 
 dotenv.config();
 
@@ -28,6 +30,7 @@ app.use("/api/usuarios", usuarioRoutes);
 app.use("/api/cursos", cursoRoutes);
 app.use("/api/clases", claseRoutes);
 app.use("/api/inscripciones", inscripcionRoutes);
+app.use("/api/examenes", examenRoutes);
 
 // Puerto
 const PORT = process.env.PORT || 4000;
