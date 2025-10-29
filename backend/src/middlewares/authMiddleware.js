@@ -15,6 +15,11 @@ export const auth = async (req, res, next) => {
   }
 };
 
+export const esAlumno = (req, res, next) => {
+  if (req.usuario.rol !== "alumno") return res.status(403).json({ msg: "Acceso denegado" });
+  next();
+};
+
 export const esAdmin = (req, res, next) => {
   if (req.usuario.rol !== "admin") {
     return res.status(403).json({ msg: "Acceso denegado" });
