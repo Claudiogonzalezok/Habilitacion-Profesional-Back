@@ -1,18 +1,26 @@
 // controllers/examenController.js
 import Examen from "../models/Examen.js";
 import Nota from "../models/Nota.js";
+import { io } from "socket.io-client";
 
 export const crearExamen = async (req, res) => {
   try {
     const examen = new Examen({ ...req.body, curso: req.body.curso });
     await examen.save();
+
+    // Emitir notificación a todos los alumnos del curso
+    io.to(req.body.curso).emit("notificacion", {
+      tipo: "examen",
+      mensaje: `Se creó un nuevo examen: ${examen.titulo}`,
+      examenId: examen._id,
+      fecha: new Date(),
+    });
+
     res.json(examen);
   } catch (error) {
-    console.error("Error al crear examen:", error); // 👈 importante
-    res.status(500).json({ msg: "Error al crear examen", error: error.message });
+    res.status(500).json({ msg: "Error al crear examen" });
   }
 };
-
 
 export const listarExamenes = async (req, res) => {
   try {

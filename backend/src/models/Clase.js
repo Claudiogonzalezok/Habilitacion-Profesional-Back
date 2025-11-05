@@ -13,3 +13,4 @@ const claseSchema = new mongoose.Schema({
 });
 
 export default mongoose.model("Clase", claseSchema);
+
