@@ -278,3 +278,26 @@ export const obtenerEstadisticas = async (req, res) => {
     res.status(500).json({ msg: "Error al obtener estadísticas" });
   }
 };
+// 🆕 NUEVA FUNCIÓN: Obtener alumnos de un curso (para docentes)
+export const obtenerAlumnosCurso = async (req, res) => {
+  try {
+    const curso = await Curso.findById(req.params.id)
+      .populate("alumnos", "nombre email legajo");
+
+    if (!curso) {
+      return res.status(404).json({ msg: "Curso no encontrado" });
+    }
+
+    // Verificar acceso
+    if (req.usuario.rol === "docente") {
+      if (curso.docente.toString() !== req.usuario._id.toString()) {
+        return res.status(403).json({ msg: "No tienes acceso a este curso" });
+      }
+    }
+
+    res.json(curso.alumnos);
+  } catch (error) {
+    console.error("Error al obtener alumnos:", error);
+    res.status(500).json({ msg: "Error al obtener alumnos" });
+  }
+};

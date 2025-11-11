@@ -9,17 +9,19 @@ import {
     actualizarUsuario,
     eliminarUsuario,
 } from "../controllers/usuarioController.js";
-
+import { auth, esAdmin } from "../middlewares/authMiddleware.js";
 
 const router = express.Router();
 
+// Rutas públicas
 router.post("/register", registrarUsuario);
 router.post("/login", login);
 
-router.get("/", listarUsuarios);
-router.post("/", crearUsuario);
-router.get("/:id", obtenerUsuario);
-router.put("/:id", actualizarUsuario);
-router.delete("/:id", eliminarUsuario);
+// Rutas protegidas - SOLO ADMINISTRADORES
+router.get("/", auth, esAdmin, listarUsuarios);
+router.post("/", auth, esAdmin, crearUsuario);
+router.get("/:id", auth, esAdmin, obtenerUsuario);
+router.put("/:id", auth, esAdmin, actualizarUsuario);
+router.delete("/:id", auth, esAdmin, eliminarUsuario);
 
 export default router;

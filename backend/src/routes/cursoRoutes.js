@@ -8,24 +8,28 @@ import {
   eliminarCurso,
   inscribirAlumno,
   desinscribirAlumno,
-  obtenerEstadisticas
+  obtenerEstadisticas,
+  obtenerAlumnosCurso
 } from "../controllers/cursoController.js";
-import { auth, esDocente, esAdmin } from "../middlewares/authMiddleware.js";
+import { auth, esAdmin, esDocenteOAdmin } from "../middlewares/authMiddleware.js";
 
 const router = express.Router();
 
-// Rutas públicas (con autenticación)
+// Rutas con autenticación (todos los roles)
 router.get("/", auth, listarCursos);
 router.get("/:id", auth, obtenerCurso);
 router.get("/:id/estadisticas", auth, obtenerEstadisticas);
 
-// Rutas de docente/admin
-router.post("/", auth, esDocente, crearCurso);
-router.put("/:id", auth, actualizarCurso);
-router.delete("/:id", auth, eliminarCurso);
+// 🆕 NUEVA: Obtener alumnos de un curso (docente y admin)
+router.get("/:id/alumnos", auth, esDocenteOAdmin, obtenerAlumnosCurso);
 
-// Inscripciones
-router.post("/:id/inscribir", auth, esDocente, inscribirAlumno);
-router.post("/:id/desinscribir", auth, esDocente, desinscribirAlumno);
+// Rutas de docente/admin
+router.post("/", auth, esDocenteOAdmin, crearCurso);
+router.put("/:id", auth, esDocenteOAdmin, actualizarCurso);
+router.delete("/:id", auth, esAdmin, eliminarCurso); // Solo admin puede eliminar
+
+// Inscripciones - SOLO ADMIN
+router.post("/:id/inscribir", auth, esAdmin, inscribirAlumno);
+router.post("/:id/desinscribir", auth, esAdmin, desinscribirAlumno);
 
 export default router;

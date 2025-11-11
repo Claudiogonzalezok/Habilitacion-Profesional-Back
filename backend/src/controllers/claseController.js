@@ -77,19 +77,16 @@ export const crearClase = async (req, res) => {
     const { 
       titulo, 
       descripcion, 
-      curso, 
+      cursoId,
       fecha, 
-      horaInicio, 
-      horaFin, 
-      tipo, 
-      enlaceReunion, 
-      objetivos, 
+      horario,  // { inicio, fin }
+      ubicacion, // { tipo, enlace }
       contenido, 
       orden 
     } = req.body;
 
     // Verificar que el curso existe
-    const cursoExiste = await Curso.findById(curso);
+    const cursoExiste = await Curso.findById(cursoId);
     if (!cursoExiste) {
       return res.status(404).json({ msg: "Curso no encontrado" });
     }
@@ -99,8 +96,17 @@ export const crearClase = async (req, res) => {
       return res.status(403).json({ msg: "No tienes permiso para crear clases en este curso" });
     }
 
+    // Validar que horario e ubicacion existan
+    if (!horario || !horario.inicio || !horario.fin) {
+      return res.status(400).json({ msg: "El horario (inicio y fin) es requerido" });
+    }
+
+    if (!ubicacion || !ubicacion.tipo) {
+      return res.status(400).json({ msg: "El tipo de ubicación es requerido" });
+    }
+
     // Validar horas
-    if (horaInicio >= horaFin) {
+    if (horario.inicio >= horario.fin) {
       return res.status(400).json({ msg: "La hora de inicio debe ser anterior a la hora de fin" });
     }
 
@@ -111,16 +117,16 @@ export const crearClase = async (req, res) => {
       return res.status(400).json({ msg: "La fecha debe estar dentro del período del curso" });
     }
 
+    // Crear clase con los campos del modelo actual
     const nuevaClase = new Clase({
       titulo,
       descripcion,
-      curso,
+      curso: cursoId,
       fecha,
-      horaInicio,
-      horaFin,
-      tipo,
-      enlaceReunion,
-      objetivos,
+      horaInicio: horario.inicio,  // Mapear al campo del modelo
+      horaFin: horario.fin,         // Mapear al campo del modelo
+      tipo: ubicacion.tipo,         // Mapear al campo del modelo
+      enlaceReunion: ubicacion.enlace || "", // Mapear al campo del modelo
       contenido,
       orden
     });
@@ -131,6 +137,12 @@ export const crearClase = async (req, res) => {
     res.status(201).json({ msg: "Clase creada exitosamente", clase: nuevaClase });
   } catch (error) {
     console.error("Error al crear clase:", error);
+    
+    if (error.name === 'ValidationError') {
+      const messages = Object.values(error.errors).map(val => val.message);
+      return res.status(400).json({ msg: messages.join(', ') });
+    }
+
     res.status(500).json({ msg: "Error al crear clase" });
   }
 };
@@ -149,11 +161,28 @@ export const actualizarClase = async (req, res) => {
       return res.status(403).json({ msg: "No tienes permiso para editar esta clase" });
     }
 
-    // Validar horas si se actualizan
-    if (req.body.horaInicio && req.body.horaFin) {
-      if (req.body.horaInicio >= req.body.horaFin) {
-        return res.status(400).json({ msg: "La hora de inicio debe ser anterior a la hora de fin" });
+    const { horario, ubicacion, cursoId, ...otrosCampos } = req.body;
+
+    // Preparar datos para actualizar
+    const datosActualizacion = { ...otrosCampos };
+
+    // Mapear horario si viene
+    if (horario) {
+      if (horario.inicio) datosActualizacion.horaInicio = horario.inicio;
+      if (horario.fin) datosActualizacion.horaFin = horario.fin;
+      
+      // Validar horas si se actualizan
+      if (datosActualizacion.horaInicio && datosActualizacion.horaFin) {
+        if (datosActualizacion.horaInicio >= datosActualizacion.horaFin) {
+          return res.status(400).json({ msg: "La hora de inicio debe ser anterior a la hora de fin" });
+        }
       }
+    }
+
+    // Mapear ubicacion si viene
+    if (ubicacion) {
+      if (ubicacion.tipo) datosActualizacion.tipo = ubicacion.tipo;
+      if (ubicacion.enlace !== undefined) datosActualizacion.enlaceReunion = ubicacion.enlace;
     }
 
     // Validar fecha si se actualiza
@@ -168,7 +197,7 @@ export const actualizarClase = async (req, res) => {
 
     const claseActualizada = await Clase.findByIdAndUpdate(
       req.params.id,
-      req.body,
+      datosActualizacion,
       { new: true, runValidators: true }
     ).populate("curso", "titulo codigo");
 
