@@ -1,6 +1,8 @@
+import dotenv from "dotenv";
+dotenv.config(); // ✅ PRIMERO - Cargar variables de entorno antes que todo
+
 import express from "express";
 import mongoose from "mongoose";
-import dotenv from "dotenv";
 import cors from "cors";
 import { createServer } from "http";
 import { Server } from "socket.io";
@@ -11,8 +13,6 @@ import cursoRoutes from "./src/routes/cursoRoutes.js";
 import claseRoutes from "./src/routes/claseRoutes.js";
 import inscripcionRoutes from "./src/routes/inscripcionRoutes.js";
 import examenRoutes from "./src/routes/examenRoutes.js";
-
-dotenv.config();
 
 const app = express();
 const server = createServer(app); // 🔹 Crear servidor HTTP

@@ -1,21 +1,42 @@
 // routes/usuarioRoutes.js
 import express from "express";
 import {
-    registrarUsuario,
-    login,
-    listarUsuarios,
-    obtenerUsuario,
-    crearUsuario,
-    actualizarUsuario,
-    eliminarUsuario,
+  registrarUsuario,
+  login,
+  logout,
+  refreshToken,
+  solicitarRecuperacion,
+  restablecerPassword,
+  verificarEmail,           // 🆕 NUEVO
+  reenviarVerificacion,     // 🆕 NUEVO
+  listarUsuarios,
+  obtenerUsuario,
+  crearUsuario,
+  actualizarUsuario,
+  eliminarUsuario,
 } from "../controllers/usuarioController.js";
 import { auth, esAdmin } from "../middlewares/authMiddleware.js";
 
 const router = express.Router();
 
-// Rutas públicas
+// ========== RUTAS PÚBLICAS ==========
 router.post("/register", registrarUsuario);
 router.post("/login", login);
+
+// 🆕 Recuperación de contraseña
+router.post("/forgot-password", solicitarRecuperacion);
+router.post("/reset-password/:token", restablecerPassword);
+
+// 🆕 Verificación de email
+router.get("/verify-email/:token", verificarEmail);
+router.post("/resend-verification", reenviarVerificacion);
+
+// 🆕 Refresh token
+router.post("/refresh-token", refreshToken);
+
+// ========== RUTAS PROTEGIDAS ==========
+// 🆕 Logout
+router.post("/logout", auth, logout);
 
 // Rutas protegidas - SOLO ADMINISTRADORES
 router.get("/", auth, esAdmin, listarUsuarios);
