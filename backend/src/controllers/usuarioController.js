@@ -130,7 +130,7 @@ export const registrarUsuario = async (req, res) => {
   }
 };
 
-// 🆕 VERIFICAR EMAIL
+// 🆕 VERIFICAR EMAIL (simplificado)
 export const verificarEmail = async (req, res) => {
   try {
     const { token } = req.params;
@@ -150,7 +150,7 @@ export const verificarEmail = async (req, res) => {
       });
     }
 
-    // Verificar email
+    // Verificar email (la contraseña ya está guardada)
     usuario.emailVerificado = true;
     usuario.emailVerificationToken = undefined;
     usuario.emailVerificationExpires = undefined;
@@ -160,7 +160,7 @@ export const verificarEmail = async (req, res) => {
     await enviarEmailBienvenida(usuario.email, usuario.nombre);
 
     res.json({ 
-      msg: "¡Email verificado exitosamente! Ya puedes iniciar sesión.",
+      msg: "¡Email verificado exitosamente! Ya puedes iniciar sesión con las credenciales que te enviamos.",
       emailVerificado: true
     });
   } catch (error) {
@@ -492,7 +492,6 @@ export const obtenerUsuario = async (req, res) => {
   }
 };
 
-// 🔥 REEMPLAZAR ESTA FUNCIÓN COMPLETA
 export const crearUsuario = async (req, res) => {
   try {
     const { nombre, email, password, rol, requiereVerificacion } = req.body;
@@ -506,29 +505,30 @@ export const crearUsuario = async (req, res) => {
       return res.status(400).json({ msg: "Email inválido" });
     }
 
+    // 🔥 AHORA LA CONTRASEÑA ES OBLIGATORIA EN AMBOS CASOS
+    if (!password) {
+      return res.status(400).json({ msg: "La contraseña es obligatoria" });
+    }
+
+    const passwordValidacion = validarPassword(password);
+    if (!passwordValidacion.valido) {
+      return res.status(400).json({ msg: passwordValidacion.mensaje });
+    }
+
     // Verificar si el email ya existe
     const existe = await Usuario.findOne({ email: email.toLowerCase() });
     if (existe) {
       return res.status(400).json({ msg: "El email ya está registrado" });
     }
 
+    const salt = bcrypt.genSaltSync(10);
+    const hash = bcrypt.hashSync(password, salt);
+
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     // OPCIÓN 1: USUARIO CON VERIFICACIÓN PENDIENTE
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     if (requiereVerificacion) {
-      // Validar que venga contraseña
-      if (!password) {
-        return res.status(400).json({ msg: "La contraseña es obligatoria" });
-      }
-
-      const passwordValidacion = validarPassword(password);
-      if (!passwordValidacion.valido) {
-        return res.status(400).json({ msg: passwordValidacion.mensaje });
-      }
-
-      const salt = bcrypt.genSaltSync(10);
-      const hash = bcrypt.hashSync(password, salt);
-
+      
       // Generar token de verificación
       const verificationToken = crypto.randomBytes(32).toString("hex");
       const hashedToken = crypto.createHash("sha256").update(verificationToken).digest("hex");
@@ -536,7 +536,7 @@ export const crearUsuario = async (req, res) => {
       const nuevoUsuario = new Usuario({ 
         nombre, 
         email: email.toLowerCase(), 
-        password: hash, 
+        password: hash, // 🔥 Guardamos la contraseña hasheada
         rol: rol || "alumno",
         emailVerificado: false,
         emailVerificationToken: hashedToken,
@@ -545,12 +545,17 @@ export const crearUsuario = async (req, res) => {
       
       await nuevoUsuario.save();
 
-      // Enviar email de verificación
+      // 🔥 Enviar email de verificación CON contraseña en texto plano
       try {
-        await enviarEmailVerificacion(nuevoUsuario.email, nuevoUsuario.nombre, verificationToken);
+        await enviarEmailVerificacion(
+          nuevoUsuario.email, 
+          nuevoUsuario.nombre, 
+          verificationToken,
+          password // 🔥 Pasar contraseña original
+        );
         
         return res.status(201).json({ 
-          msg: "Usuario creado. Se ha enviado un email de verificación.",
+          msg: "Usuario creado. Se ha enviado un email de verificación con las credenciales.",
           requiereVerificacion: true,
           usuario: {
             _id: nuevoUsuario._id,
@@ -576,19 +581,6 @@ export const crearUsuario = async (req, res) => {
     // OPCIÓN 2: USUARIO PRE-VERIFICADO CON CREDENCIALES
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     else {
-      // Validar que venga contraseña
-      if (!password) {
-        return res.status(400).json({ msg: "La contraseña es obligatoria" });
-      }
-
-      const passwordValidacion = validarPassword(password);
-      if (!passwordValidacion.valido) {
-        return res.status(400).json({ msg: passwordValidacion.mensaje });
-      }
-
-      const salt = bcrypt.genSaltSync(10);
-      const hash = bcrypt.hashSync(password, salt);
-
       const nuevoUsuario = new Usuario({ 
         nombre, 
         email: email.toLowerCase(), 

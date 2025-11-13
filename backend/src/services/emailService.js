@@ -137,9 +137,9 @@ export const enviarEmailConfirmacionCambio = async (email, nombre) => {
 };
 
 /**
- * Enviar email de verificación de cuenta
+ * Enviar email de verificación de cuenta (con contraseña)
  */
-export const enviarEmailVerificacion = async (email, nombre, verificationToken) => {
+export const enviarEmailVerificacion = async (email, nombre, verificationToken, passwordTemporal) => {
   const transporter = getTransporter();
   
   if (!transporter) {
@@ -164,6 +164,7 @@ export const enviarEmailVerificacion = async (email, nombre, verificationToken) 
           .button { display: inline-block; padding: 12px 30px; background-color: #198754; color: white; text-decoration: none; border-radius: 5px; margin: 20px 0; }
           .footer { text-align: center; margin-top: 20px; color: #6c757d; font-size: 12px; }
           .warning { background-color: #fff3cd; border-left: 4px solid #ffc107; padding: 15px; margin: 20px 0; }
+          .credentials { background-color: #fff; border: 2px solid #198754; padding: 20px; border-radius: 5px; margin: 20px 0; }
         </style>
       </head>
       <body>
@@ -180,6 +181,20 @@ export const enviarEmailVerificacion = async (email, nombre, verificationToken) 
             </div>
             <p>O copia y pega este enlace en tu navegador:</p>
             <p style="word-break: break-all; color: #198754;">${verificationURL}</p>
+            
+            ${passwordTemporal ? `
+            <div class="credentials">
+              <h3 style="margin-top: 0; color: #198754;">📋 Tus credenciales de acceso:</h3>
+              <p style="margin: 10px 0;">
+                <strong>Email:</strong> ${email}<br>
+                <strong>Contraseña:</strong> <code style="background: #f8f9fa; padding: 5px 10px; border-radius: 3px; font-size: 14px;">${passwordTemporal}</code>
+              </p>
+              <p style="margin: 10px 0; color: #666; font-size: 14px;">
+                💡 <strong>Importante:</strong> Guarda esta contraseña en un lugar seguro. Podrás cambiarla después de iniciar sesión.
+              </p>
+            </div>
+            ` : ''}
+            
             <div class="warning">
               <strong>⚠️ Importante:</strong>
               <ul>

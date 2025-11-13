@@ -41,7 +41,6 @@ export const esDocente = (req, res, next) => {
   next();
 };
 
-// 🆕 NUEVO: Middleware para docente o admin (no alumno)
 export const esDocenteOAdmin = (req, res, next) => {
   if (req.usuario.rol !== "docente" && req.usuario.rol !== "admin") {
     return res.status(403).json({ msg: "Acceso denegado - Requiere rol docente o admin" });
@@ -49,7 +48,6 @@ export const esDocenteOAdmin = (req, res, next) => {
   next();
 };
 
-// 🆕 NUEVO: Middleware para verificar acceso a curso
 export const verificarAccesoCurso = async (req, res, next) => {
   try {
     const { id, cursoId } = req.params;
