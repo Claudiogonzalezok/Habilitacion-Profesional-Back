@@ -2,62 +2,71 @@
 import mongoose from "mongoose";
 
 const entregaSchema = new mongoose.Schema({
-  tarea: { 
-    type: mongoose.Schema.Types.ObjectId, 
-    ref: "Tarea", 
-    required: true 
+  tarea: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "Tarea",
+    required: true
   },
-  alumno: { 
-    type: mongoose.Schema.Types.ObjectId, 
-    ref: "Usuario", 
-    required: true 
+  alumno: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "Usuario",
+    required: true
   },
   
   // Contenido de la entrega
-  comentarioAlumno: String,
+  comentarioAlumno: {
+    type: String,
+    trim: true
+  },
   archivosEntregados: [{
     nombre: String,
     url: String,
     tipo: String,
     tamano: Number,
-    fechaSubida: { type: Date, default: Date.now }
+    fechaSubida: {
+      type: Date,
+      default: Date.now
+    }
   }],
   
-  // Fechas
-  fechaEntrega: { 
-    type: Date, 
-    default: Date.now 
-  },
-  fechaUltimaModificacion: { 
-    type: Date, 
-    default: Date.now 
-  },
-  
-  // Estado de entrega
+  // Estado de la entrega
   estado: {
     type: String,
-    enum: ["pendiente", "entregada", "tarde", "calificada", "devuelta"],
+    enum: ["pendiente", "entregada", "calificada", "devuelta"],
     default: "pendiente"
   },
-  entregadaTarde: {
-    type: Boolean,
-    default: false
+  
+  // Fechas
+  fechaEntrega: {
+    type: Date
+  },
+  fechaUltimaModificacion: {
+    type: Date
+  },
+  fechaCalificacion: {
+    type: Date
   },
   
   // Calificación
   calificacion: {
     type: Number,
-    min: 0,
-    default: null
+    min: 0
+  },
+  comentarioDocente: {
+    type: String,
+    trim: true
   },
   calificacionRubrica: [{
     criterio: String,
     puntajeObtenido: Number,
-    puntajeMaximo: Number
+    comentario: String
   }],
+  docenteCalificador: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "Usuario"
+  },
   
-  // Feedback del docente
-  comentarioDocente: String,
+  // Archivos de devolución del docente
   archivosDevolucion: [{
     nombre: String,
     url: String,
@@ -65,11 +74,10 @@ const entregaSchema = new mongoose.Schema({
     tamano: Number
   }],
   
-  // Metadata
-  fechaCalificacion: Date,
-  docenteCalificador: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: "Usuario"
+  // Control de entregas tardías
+  entregadaTarde: {
+    type: Boolean,
+    default: false
   },
   
   // Historial de versiones
@@ -81,20 +89,29 @@ const entregaSchema = new mongoose.Schema({
       tamano: Number
     }],
     comentario: String,
-    fecha: { type: Date, default: Date.now }
+    fecha: Date
   }]
+}, {
+  timestamps: true
 });
 
-// Índices
-entregaSchema.index({ tarea: 1, alumno: 1 }, { unique: true }); // Un alumno solo puede tener una entrega por tarea
+// Índices para mejorar rendimiento
+entregaSchema.index({ tarea: 1, alumno: 1 }, { unique: true });
 entregaSchema.index({ tarea: 1, estado: 1 });
 entregaSchema.index({ alumno: 1, estado: 1 });
 
-// Middleware para actualizar fecha de modificación
+// Middleware pre-save para actualizar fechas
 entregaSchema.pre('save', function(next) {
-  if (this.isModified() && !this.isNew) {
-    this.fechaUltimaModificacion = new Date();
+  // Si cambia de pendiente a entregada, establecer fechaEntrega
+  if (this.isModified('estado') && this.estado === 'entregada' && !this.fechaEntrega) {
+    this.fechaEntrega = new Date();
   }
+  
+  // Si se califica, establecer fechaCalificacion
+  if (this.isModified('estado') && this.estado === 'calificada' && !this.fechaCalificacion) {
+    this.fechaCalificacion = new Date();
+  }
+  
   next();
 });
 

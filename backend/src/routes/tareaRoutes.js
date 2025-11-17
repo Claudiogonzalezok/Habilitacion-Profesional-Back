@@ -11,7 +11,7 @@ import {
   duplicarTarea,
 } from "../controllers/tareaController.js";
 import { auth, esDocente, esDocenteOAdmin } from "../middlewares/authMiddleware.js";
-import upload from "../middlewares/uploadMiddleware.js"; // Para subir archivos
+import upload from "../middlewares/uploadMiddleware.js";
 
 const router = express.Router();
 

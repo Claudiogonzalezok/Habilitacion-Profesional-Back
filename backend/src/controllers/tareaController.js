@@ -27,7 +27,7 @@ export const listarTareas = async (req, res) => {
     if (rol === "alumno") {
       const inscripciones = await Inscripcion.find({ 
         alumno: usuarioId, 
-        estado: "activo" 
+        estado: "aprobada" 
       }).select("curso");
       const cursosIds = inscripciones.map(i => i.curso);
       query.curso = { $in: cursosIds };
@@ -46,28 +46,31 @@ export const listarTareas = async (req, res) => {
 
     const total = await Tarea.countDocuments(query);
     const tareas = await Tarea.find(query)
-      .populate("curso", "nombre")
+      .populate("curso", "titulo nombre codigo")
       .populate("docente", "nombre email")
       .populate("clase", "titulo")
       .sort({ fechaCierre: -1 })
       .skip((page - 1) * limit)
       .limit(Number(limit));
 
-    // Si es alumno, agregar info de su entrega
-    if (rol === "alumno") {
-      const tareasConEntregas = await Promise.all(
-        tareas.map(async (tarea) => {
-          const entrega = await Entrega.findOne({
-            tarea: tarea._id,
-            alumno: usuarioId
-          }).select("estado fechaEntrega calificacion entregadaTarde");
+ // Si es alumno, agregar info de su entrega
+if (rol === "alumno") {
+  const tareasConEntregas = await Promise.all(
+    tareas.map(async (tarea) => {
+      const entrega = await Entrega.findOne({
+        tarea: tarea._id,
+        alumno: usuarioId
+      }).select("estado fechaEntrega calificacion entregadaTarde");
 
-          return {
-            ...tarea.toObject(),
-            miEntrega: entrega
-          };
-        })
-      );
+      // 🔥 CAMBIAR ESTO:
+      const tareaObj = tarea.toObject();
+      return {
+        ...tareaObj,
+        curso: tarea.curso, // 🔥 Preservar el curso poblado explícitamente
+        miEntrega: entrega
+      };
+    })
+  );
 
       return res.json({
         tareas: tareasConEntregas,
@@ -110,7 +113,7 @@ export const obtenerTarea = async (req, res) => {
       const inscripcion = await Inscripcion.findOne({
         alumno: usuarioId,
         curso: tarea.curso._id,
-        estado: "activo"
+        estado: "aprobada"
       });
 
       if (!inscripcion) {
@@ -147,7 +150,7 @@ export const obtenerTarea = async (req, res) => {
 
       const totalInscritos = await Inscripcion.countDocuments({
         curso: tarea.curso._id,
-        estado: "activo"
+        estado: "aprobada"
       });
 
       return res.json({
@@ -257,7 +260,7 @@ export const crearTarea = async (req, res) => {
     // Crear entregas pendientes para todos los alumnos inscritos
     const inscripciones = await Inscripcion.find({
       curso,
-      estado: "activo"
+      estado: "aprobada"
     });
 
     const entregasPendientes = inscripciones.map(inscripcion => ({
@@ -332,7 +335,7 @@ export const actualizarTarea = async (req, res) => {
       req.params.id,
       datosActualizados,
       { new: true }
-    ).populate("curso", "nombre").populate("docente", "nombre email");
+    ).populate("curso", "titulo nombre codigo").populate("docente", "nombre email");
 
     res.json({
       msg: "Tarea actualizada correctamente",
@@ -445,7 +448,7 @@ export const obtenerTareasProximas = async (req, res) => {
       // Obtener cursos del alumno
       const inscripciones = await Inscripcion.find({
         alumno: usuarioId,
-        estado: "activo"
+        estado: "aprobada"
       }).select("curso");
       const cursosIds = inscripciones.map(i => i.curso);
 
@@ -455,7 +458,7 @@ export const obtenerTareasProximas = async (req, res) => {
         publicada: true,
         fechaCierre: { $gte: ahora, $lte: enTresDias }
       })
-        .populate("curso", "nombre")
+        .populate("curso", "titulo nombre codigo")
         .sort({ fechaCierre: 1 })
         .limit(10);
 
@@ -482,7 +485,7 @@ export const obtenerTareasProximas = async (req, res) => {
         docente: usuarioId,
         fechaCierre: { $gte: ahora, $lte: enTresDias }
       })
-        .populate("curso", "nombre")
+        .populate("curso", "titulo nombre codigo")
         .sort({ fechaCierre: 1 })
         .limit(10);
     }
@@ -491,7 +494,7 @@ export const obtenerTareasProximas = async (req, res) => {
       tareas = await Tarea.find({
         fechaCierre: { $gte: ahora, $lte: enTresDias }
       })
-        .populate("curso", "nombre")
+        .populate("curso", "titulo nombre codigo")
         .populate("docente", "nombre")
         .sort({ fechaCierre: 1 })
         .limit(20);

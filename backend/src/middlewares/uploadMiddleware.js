@@ -3,8 +3,10 @@ import multer from "multer";
 import path from "path";
 import fs from "fs";
 
+// 🔥 Usar variable de entorno para el directorio
+const uploadDir = process.env.UPLOAD_DIR || "./uploads";
+
 // Crear directorio de uploads si no existe
-const uploadDir = "./uploads";
 if (!fs.existsSync(uploadDir)) {
   fs.mkdirSync(uploadDir, { recursive: true });
 }
@@ -23,7 +25,7 @@ const storage = multer.diskStorage({
     let folder = "tareas";
     
     // Determinar carpeta según la ruta
-    if (req.path.includes("/entregas")) {
+    if (req.path.includes("/entregas") || req.baseUrl.includes("/entregas")) {
       folder = "entregas";
     } else if (req.path.includes("/materiales")) {
       folder = "materiales";
@@ -65,12 +67,15 @@ const fileFilter = (req, file, cb) => {
   }
 };
 
+// 🔥 Usar variable de entorno para el tamaño máximo
+const maxFileSize = parseInt(process.env.MAX_FILE_SIZE) || 52428800; // 50MB por defecto
+
 // Configuración de multer
 const upload = multer({
   storage: storage,
   fileFilter: fileFilter,
   limits: {
-    fileSize: 50 * 1024 * 1024, // 50MB máximo por archivo
+    fileSize: maxFileSize,
     files: 10 // Máximo 10 archivos por request
   }
 });
@@ -80,7 +85,7 @@ export const handleMulterError = (err, req, res, next) => {
   if (err instanceof multer.MulterError) {
     if (err.code === "LIMIT_FILE_SIZE") {
       return res.status(400).json({ 
-        msg: "El archivo excede el tamaño máximo permitido (50MB)" 
+        msg: `El archivo excede el tamaño máximo permitido (${(maxFileSize / 1048576).toFixed(0)}MB)` 
       });
     }
     if (err.code === "LIMIT_FILE_COUNT") {

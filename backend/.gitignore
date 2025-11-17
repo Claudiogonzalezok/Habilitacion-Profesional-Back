@@ -1,0 +1,9 @@
+# En la raíz del backend, agrega o actualiza tu .gitignore
+echo "uploads/*" >> .gitignore
+echo "!uploads/.gitkeep" >> .gitignore
+
+# Crear archivos .gitkeep para mantener la estructura
+touch uploads/.gitkeep
+touch uploads/tareas/.gitkeep
+touch uploads/entregas/.gitkeep
+touch uploads/materiales/.gitkeep

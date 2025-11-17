@@ -30,7 +30,7 @@ export const obtenerMisEntregas = async (req, res) => {
         select: "titulo fechaCierre puntajeMaximo curso",
         populate: {
           path: "curso",
-          select: "nombre"
+          select: "titulo nombre"
         }
       })
       .sort({ fechaEntrega: -1 })
@@ -49,11 +49,10 @@ export const obtenerMisEntregas = async (req, res) => {
   }
 };
 
-// Obtener entregas por tarea (docente)
+// 🔥 CORREGIDO: Obtener entregas por tarea (docente)
 export const obtenerEntregasPorTarea = async (req, res) => {
   try {
     const { tareaId } = req.params;
-    const { estado } = req.query;
 
     // Verificar que la tarea existe
     const tarea = await Tarea.findById(tareaId);
@@ -69,40 +68,47 @@ export const obtenerEntregasPorTarea = async (req, res) => {
       return res.status(403).json({ msg: "No tienes acceso a estas entregas" });
     }
 
-    let query = { tarea: tareaId };
-
-    if (estado) {
-      query.estado = estado;
-    }
-
-    const entregas = await Entrega.find(query)
+    // 🔥 CLAVE: Solo traer entregas que REALMENTE tienen contenido
+    const entregas = await Entrega.find({ 
+      tarea: tareaId,
+      $or: [
+        { estado: { $ne: "pendiente" } }, // Estados: entregada, calificada, devuelta
+        { archivosEntregados: { $exists: true, $ne: [] } }, // Tiene archivos
+        { comentarioAlumno: { $exists: true, $ne: "", $ne: null } } // Tiene comentario
+      ]
+    })
       .populate("alumno", "nombre email")
       .populate("docenteCalificador", "nombre")
       .sort({ fechaEntrega: -1 });
 
-    // Obtener alumnos inscritos que no han entregado
+    // Obtener TODOS los alumnos inscritos
     const inscripciones = await Inscripcion.find({
       curso: tarea.curso,
-      estado: "activo"
+      estado: "aprobada"
     }).populate("alumno", "nombre email");
 
-    const alumnosEntregados = entregas.map(e => e.alumno._id.toString());
+    // Alumnos que SÍ entregaron (con contenido real)
+    const alumnosEntregadosIds = entregas.map(e => e.alumno._id.toString());
+    
+    // Alumnos que NO entregaron
     const alumnosSinEntregar = inscripciones
-      .filter(i => !alumnosEntregados.includes(i.alumno._id.toString()))
+      .filter(i => !alumnosEntregadosIds.includes(i.alumno._id.toString()))
       .map(i => ({
         alumno: i.alumno,
-        estado: "pendiente",
+        estado: "sin entregar",
         sinEntregar: true
       }));
 
     res.json({
-      entregas,
+      entregas, // Solo las que REALMENTE tienen contenido
       alumnosSinEntregar,
       estadisticas: {
         total: inscripciones.length,
-        entregadas: entregas.filter(e => e.estado !== "pendiente").length,
-        pendientes: entregas.filter(e => e.estado === "pendiente").length + alumnosSinEntregar.length,
+        entregadas: entregas.length,
+        sinEntregar: alumnosSinEntregar.length,
         calificadas: entregas.filter(e => e.estado === "calificada").length,
+        pendientes: entregas.filter(e => e.estado === "entregada").length,
+        devueltas: entregas.filter(e => e.estado === "devuelta").length,
         tarde: entregas.filter(e => e.entregadaTarde).length
       }
     });
@@ -121,7 +127,7 @@ export const obtenerEntrega = async (req, res) => {
         path: "tarea",
         populate: {
           path: "curso docente",
-          select: "nombre email"
+          select: "titulo nombre email"
         }
       })
       .populate("docenteCalificador", "nombre email");
@@ -155,6 +161,11 @@ export const crearEntrega = async (req, res) => {
     const { tareaId, comentarioAlumno } = req.body;
     const alumnoId = req.usuario.id;
 
+    console.log("📝 Crear entrega - tareaId:", tareaId);
+    console.log("📝 Crear entrega - alumnoId:", alumnoId);
+    console.log("📝 Crear entrega - comentario:", comentarioAlumno);
+    console.log("📝 Crear entrega - archivos:", req.files?.length || 0);
+
     // Validaciones
     if (!tareaId) {
       return res.status(400).json({ msg: "El ID de la tarea es obligatorio" });
@@ -170,7 +181,7 @@ export const crearEntrega = async (req, res) => {
     const inscripcion = await Inscripcion.findOne({
       alumno: alumnoId,
       curso: tarea.curso._id,
-      estado: "activo"
+      estado: "aprobada"
     });
 
     if (!inscripcion) {
@@ -231,33 +242,44 @@ export const crearEntrega = async (req, res) => {
     }
 
     // Validar que haya contenido (archivos o comentario) según tipo de entrega
-    if (tarea.tipoEntrega === "archivo" && archivosEntregados.length === 0) {
+    if (tarea.tipoEntrega === "archivo" && archivosEntregados.length === 0 && (!entrega || !entrega.archivosEntregados || entrega.archivosEntregados.length === 0)) {
       return res.status(400).json({ msg: "Debes subir al menos un archivo" });
     }
 
-    if (tarea.tipoEntrega === "texto" && !comentarioAlumno) {
+    if (tarea.tipoEntrega === "texto" && !comentarioAlumno && (!entrega || !entrega.comentarioAlumno)) {
       return res.status(400).json({ msg: "Debes escribir un comentario" });
     }
 
     if (entrega) {
       // Actualizar entrega existente
+      console.log("🔄 Actualizando entrega existente:", entrega._id);
       
-      // Guardar versión anterior en historial
+      // Guardar versión anterior en historial SI tenía contenido
       if (entrega.archivosEntregados.length > 0 || entrega.comentarioAlumno) {
         entrega.versiones.push({
           archivos: entrega.archivosEntregados,
           comentario: entrega.comentarioAlumno,
-          fecha: entrega.fechaEntrega
+          fecha: entrega.fechaEntrega || new Date()
         });
       }
 
-      entrega.comentarioAlumno = comentarioAlumno || entrega.comentarioAlumno;
-      entrega.archivosEntregados = [...entrega.archivosEntregados, ...archivosEntregados];
+      // Actualizar campos
+      if (comentarioAlumno) {
+        entrega.comentarioAlumno = comentarioAlumno;
+      }
+      
+      if (archivosEntregados.length > 0) {
+        entrega.archivosEntregados = [...(entrega.archivosEntregados || []), ...archivosEntregados];
+      }
+      
       entrega.fechaEntrega = new Date();
+      entrega.fechaUltimaModificacion = new Date();
       entrega.estado = "entregada";
       entrega.entregadaTarde = entregadaTarde;
 
       await entrega.save();
+
+      console.log("✅ Entrega actualizada exitosamente");
 
       return res.json({
         msg: "Entrega actualizada correctamente",
@@ -266,10 +288,12 @@ export const crearEntrega = async (req, res) => {
     }
 
     // Crear nueva entrega
+    console.log("🆕 Creando nueva entrega");
+    
     const nuevaEntrega = new Entrega({
       tarea: tareaId,
       alumno: alumnoId,
-      comentarioAlumno,
+      comentarioAlumno: comentarioAlumno || "",
       archivosEntregados,
       fechaEntrega: new Date(),
       estado: "entregada",
@@ -278,12 +302,14 @@ export const crearEntrega = async (req, res) => {
 
     await nuevaEntrega.save();
 
+    console.log("✅ Nueva entrega creada exitosamente");
+
     res.status(201).json({
       msg: "Entrega enviada correctamente",
       entrega: nuevaEntrega
     });
   } catch (error) {
-    console.error("Error al crear entrega:", error);
+    console.error("❌ Error al crear entrega:", error);
     res.status(500).json({ msg: "Error al enviar la entrega" });
   }
 };
@@ -293,6 +319,10 @@ export const actualizarEntrega = async (req, res) => {
   try {
     const { comentarioAlumno } = req.body;
     const alumnoId = req.usuario.id;
+
+    console.log("🔄 Actualizar entrega - ID:", req.params.id);
+    console.log("🔄 Actualizar entrega - comentario:", comentarioAlumno);
+    console.log("🔄 Actualizar entrega - archivos:", req.files?.length || 0);
 
     const entrega = await Entrega.findById(req.params.id).populate("tarea");
 
@@ -317,17 +347,17 @@ export const actualizarEntrega = async (req, res) => {
       return res.status(400).json({ msg: "El plazo de entrega ha finalizado" });
     }
 
-    // Guardar versión anterior
+    // Guardar versión anterior SI tenía contenido
     if (entrega.archivosEntregados.length > 0 || entrega.comentarioAlumno) {
       entrega.versiones.push({
         archivos: entrega.archivosEntregados,
         comentario: entrega.comentarioAlumno,
-        fecha: entrega.fechaEntrega
+        fecha: entrega.fechaEntrega || new Date()
       });
     }
 
     // Procesar nuevos archivos
-    let archivosEntregados = [...entrega.archivosEntregados];
+    let archivosEntregados = [...(entrega.archivosEntregados || [])];
     if (req.files && req.files.length > 0) {
       const nuevosArchivos = req.files.map(file => ({
         nombre: file.originalname,
@@ -346,28 +376,38 @@ export const actualizarEntrega = async (req, res) => {
       }
     }
 
-    entrega.comentarioAlumno = comentarioAlumno || entrega.comentarioAlumno;
+    // Actualizar campos
+    if (comentarioAlumno !== undefined) {
+      entrega.comentarioAlumno = comentarioAlumno;
+    }
     entrega.archivosEntregados = archivosEntregados;
     entrega.fechaUltimaModificacion = new Date();
+    entrega.estado = "entregada";
     entrega.entregadaTarde = entregadaTarde;
 
     await entrega.save();
+
+    console.log("✅ Entrega actualizada exitosamente");
 
     res.json({
       msg: "Entrega actualizada correctamente",
       entrega
     });
   } catch (error) {
-    console.error("Error al actualizar entrega:", error);
+    console.error("❌ Error al actualizar entrega:", error);
     res.status(500).json({ msg: "Error al actualizar la entrega" });
   }
 };
 
-// Calificar entrega (docente)
+// 🔥 CORREGIDO: Calificar entrega (docente)
 export const calificarEntrega = async (req, res) => {
   try {
     const { calificacion, comentarioDocente, calificacionRubrica } = req.body;
     const docenteId = req.usuario.id;
+
+    console.log("📝 Calificar entrega - ID:", req.params.id);
+    console.log("📝 Calificar entrega - calificación:", calificacion);
+    console.log("📝 Calificar entrega - comentario:", comentarioDocente);
 
     const entrega = await Entrega.findById(req.params.id).populate("tarea");
 
@@ -382,17 +422,18 @@ export const calificarEntrega = async (req, res) => {
     }
 
     // Validar calificación
-    if (calificacion < 0 || calificacion > entrega.tarea.puntajeMaximo) {
+    const calificacionNum = Number(calificacion);
+    if (isNaN(calificacionNum) || calificacionNum < 0 || calificacionNum > entrega.tarea.puntajeMaximo) {
       return res.status(400).json({ 
         msg: `La calificación debe estar entre 0 y ${entrega.tarea.puntajeMaximo}` 
       });
     }
 
     // Aplicar penalización si es entrega tarde
-    let calificacionFinal = calificacion;
+    let calificacionFinal = calificacionNum;
     if (entrega.entregadaTarde && entrega.tarea.penalizacionTarde > 0) {
-      const penalizacion = (calificacion * entrega.tarea.penalizacionTarde) / 100;
-      calificacionFinal = Math.max(0, calificacion - penalizacion);
+      const penalizacion = (calificacionNum * entrega.tarea.penalizacionTarde) / 100;
+      calificacionFinal = Math.max(0, calificacionNum - penalizacion);
     }
 
     // Procesar archivos de devolución si existen
@@ -418,7 +459,7 @@ export const calificarEntrega = async (req, res) => {
     }
 
     entrega.calificacion = calificacionFinal;
-    entrega.comentarioDocente = comentarioDocente;
+    entrega.comentarioDocente = comentarioDocente || "";
     entrega.calificacionRubrica = calificacionRubricaParsed || [];
     entrega.archivosDevolucion = archivosDevolucion;
     entrega.estado = "calificada";
@@ -427,7 +468,7 @@ export const calificarEntrega = async (req, res) => {
 
     await entrega.save();
 
-    // TODO: Enviar notificación al alumno
+    console.log("✅ Entrega calificada exitosamente");
 
     res.json({
       msg: "Entrega calificada correctamente",
@@ -435,7 +476,7 @@ export const calificarEntrega = async (req, res) => {
       penalizacionAplicada: entrega.entregadaTarde ? entrega.tarea.penalizacionTarde : 0
     });
   } catch (error) {
-    console.error("Error al calificar entrega:", error);
+    console.error("❌ Error al calificar entrega:", error);
     res.status(500).json({ msg: "Error al calificar la entrega" });
   }
 };
@@ -464,8 +505,6 @@ export const devolverEntrega = async (req, res) => {
 
     await entrega.save();
 
-    // TODO: Enviar notificación al alumno
-
     res.json({
       msg: "Entrega devuelta para corrección",
       entrega
@@ -481,7 +520,7 @@ export const exportarCalificaciones = async (req, res) => {
   try {
     const { tareaId } = req.params;
 
-    const tarea = await Tarea.findById(tareaId).populate("curso", "nombre");
+    const tarea = await Tarea.findById(tareaId).populate("curso", "titulo nombre");
     if (!tarea) {
       return res.status(404).json({ msg: "Tarea no encontrada" });
     }
@@ -494,7 +533,15 @@ export const exportarCalificaciones = async (req, res) => {
       return res.status(403).json({ msg: "No tienes acceso a esta información" });
     }
 
-    const entregas = await Entrega.find({ tarea: tareaId })
+    // Solo entregas reales
+    const entregas = await Entrega.find({ 
+      tarea: tareaId,
+      $or: [
+        { estado: { $ne: "pendiente" } },
+        { archivosEntregados: { $ne: [] } },
+        { comentarioAlumno: { $ne: "" } }
+      ]
+    })
       .populate("alumno", "nombre email")
       .sort({ "alumno.nombre": 1 });
 
@@ -511,7 +558,7 @@ export const exportarCalificaciones = async (req, res) => {
     // Preparar datos para exportar
     const datos = [
       {
-        curso: tarea.curso.nombre,
+        curso: tarea.curso.titulo || tarea.curso.nombre,
         tarea: tarea.titulo,
         puntajeMaximo: tarea.puntajeMaximo,
         fechaExportacion: new Date().toISOString()
@@ -528,7 +575,7 @@ export const exportarCalificaciones = async (req, res) => {
         e.estado,
         e.fechaEntrega ? new Date(e.fechaEntrega).toLocaleString() : "-",
         e.entregadaTarde ? "Sí" : "No",
-        e.calificacion !== null ? e.calificacion : "-",
+        e.calificacion !== null && e.calificacion !== undefined ? e.calificacion : "-",
         e.comentarioDocente || "-"
       ]);
     });
@@ -581,7 +628,7 @@ export const listarEntregas = async (req, res) => {
         select: "titulo puntajeMaximo curso",
         populate: {
           path: "curso",
-          select: "nombre"
+          select: "titulo nombre"
         }
       })
       .sort({ fechaEntrega: -1 })
