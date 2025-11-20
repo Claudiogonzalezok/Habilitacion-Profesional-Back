@@ -20,6 +20,14 @@ import tareaRoutes from "./src/routes/tareaRoutes.js";
 import entregaRoutes from "./src/routes/entregaRoutes.js";
 import { handleMulterError } from "./src/middlewares/uploadMiddleware.js";
 
+// ✅ AGREGAR ESTAS LÍNEAS después de las importaciones existentes
+
+import anuncioRoutes from "./src/routes/anuncioRoutes.js";
+import foroRoutes from "./src/routes/foroRoutes.js";
+import mensajeRoutes from "./src/routes/mensajeRoutes.js";
+import notificacionRoutes from "./src/routes/notificacionRoutes.js";
+import reporteRoutes from "./src/routes/reporteRoutes.js";
+
 const app = express();
 const server = createServer(app); // 🔹 Crear servidor HTTP
 
@@ -88,6 +96,12 @@ app.use("/api/inscripciones", inscripcionRoutes);
 app.use("/api/examenes", examenRoutes);
 app.use("/api/tareas", tareaRoutes);
 app.use("/api/entregas", entregaRoutes);
+// ✅ AGREGAR ESTAS LÍNEAS después de las rutas existentes
+app.use("/api/anuncios", anuncioRoutes);
+app.use("/api/foros", foroRoutes);
+app.use("/api/mensajes", mensajeRoutes);
+app.use("/api/notificaciones", notificacionRoutes);
+app.use("/api/reportes", reporteRoutes);
 
 // Ruta de prueba
 app.get("/", (req, res) => {
