@@ -10,6 +10,7 @@ import {
   verificarEmail,           // 🆕 NUEVO
   reenviarVerificacion,     // 🆕 NUEVO
   listarUsuarios,
+  listarUsuariosParaMensajes, // 🆕 NUEVO: Para mensajería
   obtenerUsuario,
   crearUsuario,
   actualizarUsuario,
@@ -37,6 +38,9 @@ router.post("/refresh-token", refreshToken);
 // ========== RUTAS PROTEGIDAS ==========
 // 🆕 Logout
 router.post("/logout", auth, logout);
+
+// 🆕 Listar usuarios básicos para mensajería (todos los usuarios autenticados)
+router.get("/mensajeria", auth, listarUsuariosParaMensajes);
 
 // Rutas protegidas - SOLO ADMINISTRADORES
 router.get("/", auth, esAdmin, listarUsuarios);

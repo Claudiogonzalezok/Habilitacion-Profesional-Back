@@ -476,6 +476,30 @@ export const listarUsuarios = async (req, res) => {
   }
 };
 
+// ✅ Listar usuarios básicos para mensajería (TODOS LOS USUARIOS AUTENTICADOS)
+export const listarUsuariosParaMensajes = async (req, res) => {
+  try {
+    console.log("📨 Solicitud de usuarios para mensajería por:", req.usuario.nombre);
+    
+    // Solo devolver información básica necesaria para enviar mensajes
+    // Buscar todos los usuarios activos (sin filtrar por emailVerified)
+    const usuarios = await Usuario.find()
+      .select("_id nombre email rol emailVerified")
+      .sort({ nombre: 1 })
+      .limit(100);
+
+    console.log(`✅ Se encontraron ${usuarios.length} usuarios para mensajería`);
+
+    res.json({ 
+      usuarios,
+      total: usuarios.length 
+    });
+  } catch (error) {
+    console.error("❌ Error al listar usuarios para mensajes:", error);
+    res.status(500).json({ msg: "Error al obtener los usuarios" });
+  }
+};
+
 export const obtenerUsuario = async (req, res) => {
   try {
     const usuario = await Usuario.findById(req.params.id)
