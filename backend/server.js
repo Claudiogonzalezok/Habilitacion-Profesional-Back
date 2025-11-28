@@ -31,6 +31,9 @@ import reporteRoutes from "./src/routes/reporteRoutes.js";
 // Importar rutas de calificaciones
 import calificacionesRoutes from "./src/routes/calificacionesRoutes.js";
 
+// Importar rutas de calificaciones
+import notasAlumnoRoutes from "./src/routes/notasAlumnoRoutes.js";
+
 const app = express();
 const server = createServer(app); // 🔹 Crear servidor HTTP
 
@@ -99,15 +102,13 @@ app.use("/api/inscripciones", inscripcionRoutes);
 app.use("/api/examenes", examenRoutes);
 app.use("/api/tareas", tareaRoutes);
 app.use("/api/entregas", entregaRoutes);
-// ✅ AGREGAR ESTAS LÍNEAS después de las rutas existentes
 app.use("/api/anuncios", anuncioRoutes);
 app.use("/api/foros", foroRoutes);
 app.use("/api/mensajes", mensajeRoutes);
 app.use("/api/notificaciones", notificacionRoutes);
 app.use("/api/reportes", reporteRoutes);
-// Registrar rutas (agregar junto a las otras rutas)
 app.use("/api/calificaciones", calificacionesRoutes);
-
+app.use("/api/notas-alumno", notasAlumnoRoutes);
 // Ruta de prueba
 app.get("/", (req, res) => {
   res.json({ 
