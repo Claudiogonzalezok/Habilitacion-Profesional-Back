@@ -31,8 +31,12 @@ import reporteRoutes from "./src/routes/reporteRoutes.js";
 // Importar rutas de calificaciones
 import calificacionesRoutes from "./src/routes/calificacionesRoutes.js";
 
-// Importar rutas de calificaciones
+// Importar rutas de notas
 import notasAlumnoRoutes from "./src/routes/notasAlumnoRoutes.js";
+
+// Importar rutas de perfil
+import perfilRoutes from "./src/routes/perfilRoutes.js";
+
 
 const app = express();
 const server = createServer(app); // 🔹 Crear servidor HTTP
@@ -109,6 +113,7 @@ app.use("/api/notificaciones", notificacionRoutes);
 app.use("/api/reportes", reporteRoutes);
 app.use("/api/calificaciones", calificacionesRoutes);
 app.use("/api/notas-alumno", notasAlumnoRoutes);
+app.use("/api/perfil", perfilRoutes);
 // Ruta de prueba
 app.get("/", (req, res) => {
   res.json({ 
