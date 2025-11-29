@@ -37,6 +37,9 @@ import notasAlumnoRoutes from "./src/routes/notasAlumnoRoutes.js";
 // Importar rutas de perfil
 import perfilRoutes from "./src/routes/perfilRoutes.js";
 
+// Importar ruta solicitud inscripcion
+import solicitudInscripcionRoutes from "./src/routes/solicitudInscripcionRoutes.js";
+
 
 const app = express();
 const server = createServer(app); // 🔹 Crear servidor HTTP
@@ -114,6 +117,7 @@ app.use("/api/reportes", reporteRoutes);
 app.use("/api/calificaciones", calificacionesRoutes);
 app.use("/api/notas-alumno", notasAlumnoRoutes);
 app.use("/api/perfil", perfilRoutes);
+app.use("/api/solicitudes-inscripcion", solicitudInscripcionRoutes);
 // Ruta de prueba
 app.get("/", (req, res) => {
   res.json({ 

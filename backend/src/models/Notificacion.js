@@ -34,6 +34,11 @@ const notificacionSchema = new mongoose.Schema({
     enum: ["baja", "normal", "alta"],
     default: "normal"
   },
+  tipo: {
+  type: String,
+  enum: ["tarea", "examen", "calificacion", "mensaje", "anuncio", "foro", "curso", "alerta", "sistema", "inscripcion"], 
+  required: true
+},
   metadata: {
     cursoId: mongoose.Schema.Types.ObjectId,
     tareaId: mongoose.Schema.Types.ObjectId,
