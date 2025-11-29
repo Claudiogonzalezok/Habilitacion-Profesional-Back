@@ -456,12 +456,28 @@ export const logout = async (req, res) => {
 
 export const listarUsuarios = async (req, res) => {
   try {
-    const { page = 1, limit = 15, search = "" } = req.query;
-    const query = search ? { nombre: { $regex: search, $options: "i" } } : {};
+    const { page = 1, limit = 15, search = "", rol } = req.query;
+    
+    // Construir query
+    const query = {};
+    
+    // Filtro de búsqueda por nombre o email
+    if (search) {
+      query.$or = [
+        { nombre: { $regex: search, $options: "i" } },
+        { email: { $regex: search, $options: "i" } }
+      ];
+    }
+    
+    // Filtro por rol
+    if (rol) {
+      query.rol = rol;
+    }
 
     const total = await Usuario.countDocuments(query);
     const usuarios = await Usuario.find(query)
       .select("-password -resetPasswordToken -resetPasswordExpires -refreshToken -emailVerificationToken")
+      .sort({ nombre: 1 })
       .skip((page - 1) * limit)
       .limit(Number(limit));
 
@@ -469,6 +485,7 @@ export const listarUsuarios = async (req, res) => {
       usuarios,
       totalPaginas: Math.ceil(total / limit),
       paginaActual: Number(page),
+      total
     });
   } catch (error) {
     console.error("Error al listar usuarios:", error);
@@ -684,3 +701,4 @@ export const eliminarUsuario = async (req, res) => {
     res.status(500).json({ msg: "Error al eliminar usuario" });
   }
 };
+
