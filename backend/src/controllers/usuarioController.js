@@ -89,6 +89,9 @@ export const registrarUsuario = async (req, res) => {
     const hashedToken = crypto.createHash("sha256").update(verificationToken).digest("hex");
 
     // 🆕 Crear usuario con email NO verificado
+    console.log(">> EMAIL_USER:", process.env.EMAIL_USER);
+console.log(">> EMAIL_PASS exists:", !!process.env.EMAIL_PASS);
+console.log(">> EMAIL_FROM:", process.env.EMAIL_FROM);
     const usuario = new Usuario({ 
       nombre, 
       email: email.toLowerCase(), 
