@@ -1,13 +1,12 @@
+// backend/server.js
 import "./loadEnv.js";
 import dotenv from "dotenv";
 import path from "path";
 import { fileURLToPath } from "url";
 
-// Obtener __dirname primero (necesario para ES modules)
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Cargar .env desde la carpeta backend
 dotenv.config({ path: path.join(__dirname, ".env") });
 
 import express from "express";
@@ -16,6 +15,9 @@ import cors from "cors";
 import { createServer } from "http";
 import { Server } from "socket.io";
 import fs from "fs";
+
+// Importar servicio de cron jobs
+import { iniciarCronJobs } from "./src/services/cronService.js";
 
 // Importar rutas
 import usuarioRoutes from "./src/routes/usuarioRoutes.js";
@@ -44,13 +46,12 @@ const uploadDir = process.env.UPLOAD_DIR || "./uploads";
 const uploadsPath = path.join(__dirname, "uploads");
 const subdirs = ["tareas", "entregas", "materiales", "perfiles"];
 
-// Crear directorios de uploads si no existen
 if (!fs.existsSync(uploadsPath)) {
   fs.mkdirSync(uploadsPath, { recursive: true });
   console.log(`📁 Directorio de uploads creado: ${uploadsPath}`);
 }
 
-subdirs.forEach(subdir => {
+subdirs.forEach((subdir) => {
   const fullPath = path.join(uploadsPath, subdir);
   if (!fs.existsSync(fullPath)) {
     fs.mkdirSync(fullPath, { recursive: true });
@@ -59,69 +60,68 @@ subdirs.forEach(subdir => {
 });
 
 // ============================================
-// CONFIGURACIÓN DE CORS PARA PRODUCCIÓN
+// CONFIGURACIÓN DE CORS
 // ============================================
 const allowedOrigins = [
   process.env.FRONTEND_URL,
   "http://localhost:5173",
-  "http://localhost:3000"
+  "http://localhost:3000",
 ].filter(Boolean);
 
-// Socket.io configurado con CORS
 const io = new Server(server, {
   cors: {
-    origin: function(origin, callback) {
-      // Permitir requests sin origin (mobile apps, Postman, etc.)
+    origin: function (origin, callback) {
       if (!origin) return callback(null, true);
-      
-      // En producción, verificar si el origin está permitido
-      if (allowedOrigins.some(allowed => origin.startsWith(allowed.replace(/\/$/, '')))) {
+
+      if (
+        allowedOrigins.some((allowed) =>
+          origin.startsWith(allowed.replace(/\/$/, ""))
+        )
+      ) {
         callback(null, true);
       } else {
-        // Permitir cualquier origen de Vercel en producción
-        if (origin.includes('vercel.app')) {
+        if (origin.includes("vercel.app")) {
           callback(null, true);
         } else {
           console.log(`⚠️ Origin no permitido: ${origin}`);
-          callback(null, true); // Permitir de todos modos para evitar problemas
+          callback(null, true);
         }
       }
     },
     methods: ["GET", "POST"],
-    credentials: true
+    credentials: true,
   },
 });
 
-// Middleware CORS para Express
-app.use(cors({
-  origin: function(origin, callback) {
-    // Permitir requests sin origin
-    if (!origin) return callback(null, true);
-    
-    // Permitir orígenes configurados
-    if (allowedOrigins.some(allowed => origin.startsWith(allowed.replace(/\/$/, '')))) {
-      callback(null, true);
-    } else if (origin.includes('vercel.app') || origin.includes('render.com')) {
-      // Permitir cualquier subdominio de Vercel o Render
-      callback(null, true);
-    } else {
-      console.log(`⚠️ CORS - Origin no permitido: ${origin}`);
-      callback(null, true); // Permitir de todos modos
-    }
-  },
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
-}));
+app.use(
+  cors({
+    origin: function (origin, callback) {
+      if (!origin) return callback(null, true);
 
-// Middlewares de parsing
-app.use(express.json({ limit: '50mb' }));
-app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+      if (
+        allowedOrigins.some((allowed) =>
+          origin.startsWith(allowed.replace(/\/$/, ""))
+        )
+      ) {
+        callback(null, true);
+      } else if (origin.includes("vercel.app") || origin.includes("render.com")) {
+        callback(null, true);
+      } else {
+        console.log(`⚠️ CORS - Origin no permitido: ${origin}`);
+        callback(null, true);
+      }
+    },
+    credentials: true,
+    methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
+  })
+);
 
-// Servir archivos estáticos (uploads)
+app.use(express.json({ limit: "50mb" }));
+app.use(express.urlencoded({ extended: true, limit: "50mb" }));
+
 app.use("/uploads", express.static(uploadsPath));
 
-// Logging middleware
 app.use((req, res, next) => {
   const timestamp = new Date().toISOString();
   console.log(`[${timestamp}] ${req.method} ${req.path}`);
@@ -133,7 +133,21 @@ app.use((req, res, next) => {
 // ============================================
 mongoose
   .connect(process.env.MONGO_URI)
-  .then(() => console.log("✅ MongoDB conectado"))
+  .then(async () => {
+    console.log("✅ MongoDB conectado");
+
+    // Iniciar cron jobs para actualización automática de estados
+    iniciarCronJobs();
+
+    // Sincronizar estados al iniciar el servidor
+    try {
+      const Clase = (await import("./src/models/Clase.js")).default;
+      const actualizadas = await Clase.actualizarEstados();
+      console.log(`✅ Estados de clases sincronizados (${actualizadas} actualizadas)`);
+    } catch (error) {
+      console.error("⚠️ Error al sincronizar estados iniciales:", error.message);
+    }
+  })
   .catch((err) => {
     console.error("❌ Error MongoDB:", err);
     process.exit(1);
@@ -159,17 +173,15 @@ app.use("/api/notas-alumno", notasAlumnoRoutes);
 app.use("/api/perfil", perfilRoutes);
 app.use("/api/solicitudes-inscripcion", solicitudInscripcionRoutes);
 
-// Ruta de prueba / Health check
 app.get("/", (req, res) => {
-  res.json({ 
-    msg: "API de Aula Virtual funcionando", 
+  res.json({
+    msg: "API de Aula Virtual funcionando",
     version: "1.0.0",
     environment: process.env.NODE_ENV || "development",
-    timestamp: new Date().toISOString()
+    timestamp: new Date().toISOString(),
   });
 });
 
-// Health check para Render
 app.get("/health", (req, res) => {
   res.status(200).json({ status: "ok" });
 });
@@ -181,27 +193,27 @@ app.use(handleMulterError);
 
 app.use((err, req, res, next) => {
   console.error("❌ Error:", err.stack);
-  
+
   if (err.name === "ValidationError") {
-    return res.status(400).json({ 
+    return res.status(400).json({
       msg: "Error de validación",
-      errors: Object.values(err.errors).map(e => e.message)
+      errors: Object.values(err.errors).map((e) => e.message),
     });
   }
-  
+
   if (err.code === 11000) {
-    return res.status(400).json({ 
-      msg: "Ya existe un registro con estos datos" 
+    return res.status(400).json({
+      msg: "Ya existe un registro con estos datos",
     });
   }
-  
-  res.status(err.status || 500).json({ 
-    msg: err.message || "Error del servidor" 
+
+  res.status(err.status || 500).json({
+    msg: err.message || "Error del servidor",
   });
 });
 
 // ============================================
-// SOCKET.IO - EVENTOS
+// SOCKET.IO
 // ============================================
 io.on("connection", (socket) => {
   console.log("🟢 Usuario conectado al socket:", socket.id);
@@ -261,8 +273,7 @@ const gracefulShutdown = (signal) => {
       process.exit(0);
     });
   });
-  
-  // Forzar cierre después de 10 segundos
+
   setTimeout(() => {
     console.error("❌ Cierre forzado después de 10s");
     process.exit(1);
