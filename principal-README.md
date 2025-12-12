@@ -30,7 +30,7 @@
 ## 🏗️ Arquitectura del Proyecto
 
 ```
-aula-virtual/
+Habilitacion-Profesional-Back/
 ├── backend/                 # API REST con Node.js y Express
 │   ├── src/
 │   │   ├── config/         # Configuraciones (DB, cloudinary, etc.)
@@ -41,7 +41,9 @@ aula-virtual/
 │   │   ├── services/       # Servicios (cron jobs, emails, etc.)
 │   │   └── utils/          # Utilidades
 │   └── server.js           # Punto de entrada del servidor
-│
+└── README.md               # Este archivo
+
+aula-virtual-frontend/
 ├── frontend/               # Aplicación React con Vite
 │   ├── src/
 │   │   ├── components/     # Componentes reutilizables
