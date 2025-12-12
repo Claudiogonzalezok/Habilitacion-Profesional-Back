@@ -54,10 +54,10 @@ API REST para el sistema de gestión de aulas virtuales desarrollado con Node.js
 
 ```bash
 # Clonar el repositorio
-git clone https://github.com/tu-usuario/aula-virtual.git
+git clone https://github.com/Claudiogonzalezok/Habilitacion-Profesional-Back.git
 
 # Navegar al directorio del backend
-cd aula-virtual/backend
+cd Habilitacion-Profesional-Back/backend
 
 # Instalar dependencias
 npm install
