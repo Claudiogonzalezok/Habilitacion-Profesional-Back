@@ -116,8 +116,8 @@ aula-virtual/
 ### Clonar el repositorio
 
 ```bash
-git clone https://github.com/tu-usuario/aula-virtual.git
-cd aula-virtual
+git clone https://github.com/Claudiogonzalezok/Habilitacion-Profesional-Back.git
+cd Habilitacion-Profesional-Back
 ```
 
 ### Configurar Backend
@@ -159,6 +159,8 @@ FRONTEND_URL=http://localhost:5173
 ### Configurar Frontend
 
 ```bash
+git clone https://github.com/Claudiogonzalezok/aula-virutal-frontend.git
+cd aula-virtual-frontend
 cd frontend
 npm install
 ```
@@ -361,14 +363,17 @@ Este proyecto está bajo la Licencia MIT. Ver el archivo [LICENSE](LICENSE) para
 
 ## 👨‍💻 Autores
 
-- **Claudio** - *Desarrollo Full Stack* - [GitHub](https://github.com/tu-usuario)
+- **Claudio Gonzalez** - *Desarrollo Full Stack* - [GitHub](https://github.com/Claudiogonzalezok)
 - **Nestor Molina** - *Colaborador* - [GitHub](https://github.com/nestor-molina)
+
+## Sistema Desplegado
+https://aula-virtual-frontend.vercel.app/
 
 ## 🎓 Contexto Académico
 
 Este proyecto fue desarrollado como trabajo final para la materia **Habilitación Profesional** en la **Universidad Tecnológica Nacional - Facultad Regional Tucumán (UTN-FRT)**.
 
-**Profesor:** Rodriguez
+**Profesor:** Sergio Rodriguez
 
 ---
 
