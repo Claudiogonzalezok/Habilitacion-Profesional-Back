@@ -1,4 +1,4 @@
-// controllers/examenController.js
+// backend/src/controllers/examenController.js
 import Examen from "../models/Examen.js";
 import Curso from "../models/Curso.js";
 
@@ -77,21 +77,31 @@ export const listarExamenes = async (req, res) => {
       // Solo exámenes publicados de cursos donde está inscrito
       const cursosAlumno = await Curso.find({ alumnos: req.usuario._id }).select("_id");
       filtro.curso = { $in: cursosAlumno.map(c => c._id) };
-      filtro.estado = "publicado";
+      // Para alumnos: mostrar publicados y cerrados (para ver sus resultados)
+      filtro.estado = { $in: ["publicado", "cerrado"] };
     }
+
+    // ✅ SINCRONIZAR ESTADOS ANTES DE DEVOLVER
+    await Examen.actualizarEstados();
 
     const examenes = await Examen.find(filtro)
       .populate("curso", "titulo codigo")
       .populate("docente", "nombre email")
-      .sort({ createdAt: -1 });
+      .sort({ fechaCierre: -1, createdAt: -1 });
 
-    // Para alumnos, agregar info de sus intentos
+    // Para alumnos, agregar info de sus intentos y disponibilidad
     if (req.usuario.rol === "alumno") {
       const examenesConIntentos = examenes.map(examen => {
         const examenObj = examen.toObject();
+        
+        // Agregar información de disponibilidad
+        examenObj.estadoCalculado = examen.estadoCalculado;
+        examenObj.disponibilidad = examen.disponibilidad;
+        
         examenObj.misIntentos = examen.intentos.filter(
           i => i.alumno.toString() === req.usuario._id.toString()
         );
+        
         // No enviar las respuestas correctas al alumno
         examenObj.preguntas = examenObj.preguntas.map(p => ({
           _id: p._id,
@@ -107,7 +117,15 @@ export const listarExamenes = async (req, res) => {
       return res.json(examenesConIntentos);
     }
 
-    res.json(examenes);
+    // Para docentes/admin, agregar info de estado calculado
+    const examenesConEstado = examenes.map(examen => {
+      const examenObj = examen.toObject();
+      examenObj.estadoCalculado = examen.estadoCalculado;
+      examenObj.disponibilidad = examen.disponibilidad;
+      return examenObj;
+    });
+
+    res.json(examenesConEstado);
   } catch (error) {
     console.error("Error al listar exámenes:", error);
     res.status(500).json({ msg: "Error al listar exámenes" });
@@ -126,6 +144,11 @@ export const obtenerExamen = async (req, res) => {
       return res.status(404).json({ msg: "Examen no encontrado" });
     }
 
+    // ✅ SINCRONIZAR ESTADO INDIVIDUAL
+    if (examen.sincronizarEstado()) {
+      await examen.save();
+    }
+
     // Verificar acceso
     const curso = await Curso.findById(examen.curso._id);
     
@@ -139,6 +162,11 @@ export const obtenerExamen = async (req, res) => {
       
       // Solo enviar info necesaria para el alumno
       const examenAlumno = examen.toObject();
+      
+      // Agregar información de disponibilidad
+      examenAlumno.estadoCalculado = examen.estadoCalculado;
+      examenAlumno.disponibilidad = examen.disponibilidad;
+      
       examenAlumno.misIntentos = examen.intentos.filter(
         i => i.alumno._id.toString() === req.usuario._id.toString()
       );
@@ -167,7 +195,12 @@ export const obtenerExamen = async (req, res) => {
       }
     }
 
-    res.json(examen);
+    // Para docentes/admin
+    const examenObj = examen.toObject();
+    examenObj.estadoCalculado = examen.estadoCalculado;
+    examenObj.disponibilidad = examen.disponibilidad;
+
+    res.json(examenObj);
   } catch (error) {
     console.error("Error al obtener examen:", error);
     res.status(500).json({ msg: "Error al obtener examen" });
@@ -190,16 +223,25 @@ export const actualizarExamen = async (req, res) => {
 
     // No permitir editar si ya hay intentos completados
     if (examen.intentos.some(i => i.estado === "completado" || i.estado === "calificado")) {
-      return res.status(400).json({ 
-        msg: "No se puede editar un examen que ya tiene intentos completados" 
-      });
+      // Permitir solo cambiar estado o fechas, no preguntas
+      const camposPermitidos = ["estado", "fechaApertura", "fechaCierre", "descripcion", "titulo"];
+      const camposEnviados = Object.keys(req.body);
+      const soloPermitidos = camposEnviados.every(c => camposPermitidos.includes(c) || c === "configuracion");
+      
+      if (!soloPermitidos && req.body.preguntas) {
+        return res.status(400).json({ 
+          msg: "No se pueden modificar las preguntas de un examen con intentos. Solo puedes cambiar fechas, estado o descripción." 
+        });
+      }
     }
 
     // Actualizar campos
-    Object.assign(examen, req.body);
-
-    // Recalcular puntaje total si se modificaron preguntas
-    if (req.body.preguntas) {
+    const { preguntas, ...otrosCampos } = req.body;
+    Object.assign(examen, otrosCampos);
+    
+    // Solo actualizar preguntas si no hay intentos
+    if (preguntas && !examen.intentos.some(i => i.estado === "completado" || i.estado === "calificado")) {
+      examen.preguntas = preguntas;
       examen.calcularPuntajeTotal();
     }
 
@@ -245,6 +287,11 @@ export const iniciarIntento = async (req, res) => {
       return res.status(404).json({ msg: "Examen no encontrado" });
     }
 
+    // ✅ SINCRONIZAR ESTADO ANTES DE VERIFICAR
+    if (examen.sincronizarEstado()) {
+      await examen.save();
+    }
+
     // Verificar si puede realizar el examen
     const verificacion = examen.puedeRealizarExamen(req.usuario._id);
     
@@ -256,7 +303,8 @@ export const iniciarIntento = async (req, res) => {
     if (verificacion.intentoActual) {
       return res.json({ 
         msg: "Ya tienes un intento en progreso",
-        intentoId: verificacion.intentoActual 
+        intentoId: verificacion.intentoActual,
+        duracionMinutos: examen.configuracion.duracionMinutos
       });
     }
 
@@ -341,10 +389,10 @@ export const enviarRespuestas = async (req, res) => {
       // Calificar automáticamente según tipo
       if (pregunta.tipo === "multiple") {
         const opcionCorrecta = pregunta.opciones.find(o => o.esCorrecta);
-        respuestaIntento.esCorrecta = resp.respuesta === opcionCorrecta._id.toString();
+        respuestaIntento.esCorrecta = resp.respuesta === opcionCorrecta?._id.toString();
         respuestaIntento.puntajeObtenido = respuestaIntento.esCorrecta ? pregunta.puntaje : 0;
       } else if (pregunta.tipo === "verdadero_falso") {
-        respuestaIntento.esCorrecta = resp.respuesta.toLowerCase() === pregunta.respuestaCorrecta.toLowerCase();
+        respuestaIntento.esCorrecta = resp.respuesta?.toLowerCase() === pregunta.respuestaCorrecta?.toLowerCase();
         respuestaIntento.puntajeObtenido = respuestaIntento.esCorrecta ? pregunta.puntaje : 0;
       } else {
         // Preguntas de desarrollo o cortas requieren calificación manual
@@ -414,15 +462,13 @@ export const calificarManualmente = async (req, res) => {
       if (respuesta) {
         respuesta.puntajeObtenido = cal.puntaje;
         respuesta.comentarioDocente = cal.comentario;
-        puntuacionTotal += cal.puntaje;
+        respuesta.esCorrecta = cal.puntaje > 0;
       }
     });
 
-    // Sumar puntajes ya calificados automáticamente
+    // Calcular puntuación total sumando todas las respuestas
     intento.respuestas.forEach(r => {
-      if (!calificaciones.find(c => c.preguntaId === r.pregunta.toString())) {
-        puntuacionTotal += r.puntajeObtenido;
-      }
+      puntuacionTotal += r.puntajeObtenido || 0;
     });
 
     intento.puntuacionTotal = puntuacionTotal;
@@ -461,6 +507,11 @@ export const obtenerEstadisticas = async (req, res) => {
       return res.status(403).json({ msg: "No tienes permiso para ver estas estadísticas" });
     }
 
+    // ✅ SINCRONIZAR ESTADO
+    if (examen.sincronizarEstado()) {
+      await examen.save();
+    }
+
     const intentosCalificados = examen.intentos.filter(i => i.estado === "calificado");
 
     const estadisticas = {
@@ -472,10 +523,10 @@ export const obtenerEstadisticas = async (req, res) => {
       alumnosAprobados: examen.estadisticas.alumnosAprobados,
       alumnosReprobados: examen.estadisticas.alumnosReprobados,
       mejorNota: intentosCalificados.length > 0 
-        ? Math.max(...intentosCalificados.map(i => i.porcentaje))
+        ? Math.max(...intentosCalificados.map(i => parseFloat(i.porcentaje)))
         : 0,
       peorNota: intentosCalificados.length > 0 
-        ? Math.min(...intentosCalificados.map(i => i.porcentaje))
+        ? Math.min(...intentosCalificados.map(i => parseFloat(i.porcentaje)))
         : 0,
       intentosDetalle: intentosCalificados.map(i => ({
         alumno: i.alumno,
@@ -484,12 +535,32 @@ export const obtenerEstadisticas = async (req, res) => {
         fechaEntrega: i.fechaEntrega,
         tiempoTranscurrido: i.tiempoTranscurrido,
         intentoNumero: i.intentoNumero
-      }))
+      })),
+      // Nuevo: info de estado
+      estadoExamen: examen.estado,
+      estadoCalculado: examen.estadoCalculado,
+      disponibilidad: examen.disponibilidad
     };
 
     res.json(estadisticas);
   } catch (error) {
     console.error("Error al obtener estadísticas:", error);
     res.status(500).json({ msg: "Error al obtener estadísticas" });
+  }
+};
+
+// =============================================
+// NUEVO: Sincronizar estados manualmente
+// =============================================
+export const sincronizarEstadosExamenes = async (req, res) => {
+  try {
+    const cantidad = await Examen.actualizarEstados();
+    res.json({ 
+      msg: `Estados sincronizados correctamente`,
+      examenesActualizados: cantidad 
+    });
+  } catch (error) {
+    console.error("Error al sincronizar estados:", error);
+    res.status(500).json({ msg: "Error al sincronizar estados" });
   }
 };

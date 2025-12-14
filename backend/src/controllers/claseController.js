@@ -60,7 +60,14 @@ export const obtenerClasesPorCurso = async (req, res) => {
 export const obtenerClase = async (req, res) => {
   try {
     const clase = await Clase.findById(req.params.id)
-      .populate("curso", "titulo codigo docente alumnos")
+      .populate({
+        path: "curso",
+        select: "titulo codigo docente alumnos",
+        populate: {
+          path: "docente",
+          select: "nombre email"
+        }
+      })
       .populate("asistencias.estudiante", "nombre email");
 
     if (!clase) {
@@ -95,7 +102,6 @@ export const obtenerClase = async (req, res) => {
     res.status(500).json({ msg: "Error al obtener clase" });
   }
 };
-
 // ============================================
 // Crear clase
 // ============================================

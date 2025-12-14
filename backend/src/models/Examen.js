@@ -1,4 +1,4 @@
-// models/Examen.js
+// backend/src/models/Examen.js
 import mongoose from "mongoose";
 
 const preguntaSchema = new mongoose.Schema({
@@ -16,7 +16,7 @@ const preguntaSchema = new mongoose.Schema({
     texto: String,
     esCorrecta: Boolean
   }],
-  respuestaCorrecta: String, // Para verdadero/falso o respuesta corta
+  respuestaCorrecta: String,
   puntaje: {
     type: Number,
     required: true,
@@ -38,7 +38,7 @@ const intentoSchema = new mongoose.Schema({
     pregunta: {
       type: mongoose.Schema.Types.ObjectId
     },
-    respuesta: mongoose.Schema.Types.Mixed, // Puede ser String, Number, o Array
+    respuesta: mongoose.Schema.Types.Mixed,
     esCorrecta: Boolean,
     puntajeObtenido: {
       type: Number,
@@ -64,7 +64,7 @@ const intentoSchema = new mongoose.Schema({
     default: Date.now
   },
   fechaEntrega: Date,
-  tiempoTranscurrido: Number, // En minutos
+  tiempoTranscurrido: Number,
   intentoNumero: {
     type: Number,
     default: 1
@@ -111,7 +111,7 @@ const examenSchema = new mongoose.Schema({
     },
     mostrarRespuestas: {
       type: Boolean,
-      default: true // Mostrar respuestas correctas después de completar
+      default: true
     },
     mezclarPreguntas: {
       type: Boolean,
@@ -172,6 +172,151 @@ const examenSchema = new mongoose.Schema({
 examenSchema.index({ curso: 1, estado: 1 });
 examenSchema.index({ docente: 1 });
 examenSchema.index({ "intentos.alumno": 1 });
+examenSchema.index({ fechaApertura: 1, fechaCierre: 1 }); // Nuevo índice para consultas por fecha
+
+// =============================================
+// VIRTUAL: Estado calculado en tiempo real
+// =============================================
+examenSchema.virtual("estadoCalculado").get(function () {
+  // Si está en borrador, mantener borrador (requiere publicación manual)
+  if (this.estado === "borrador") {
+    return "borrador";
+  }
+
+  const ahora = new Date();
+  const apertura = new Date(this.fechaApertura);
+  const cierre = new Date(this.fechaCierre);
+
+  // Si ya pasó la fecha de cierre → cerrado
+  if (ahora > cierre) {
+    return "cerrado";
+  }
+
+  // Si está dentro del período y está publicado → publicado (disponible)
+  if (ahora >= apertura && ahora <= cierre && this.estado === "publicado") {
+    return "publicado";
+  }
+
+  // Si aún no abre pero está publicado → publicado (próximamente)
+  if (ahora < apertura && this.estado === "publicado") {
+    return "publicado";
+  }
+
+  return this.estado;
+});
+
+// =============================================
+// VIRTUAL: Información de disponibilidad
+// =============================================
+examenSchema.virtual("disponibilidad").get(function () {
+  const ahora = new Date();
+  const apertura = new Date(this.fechaApertura);
+  const cierre = new Date(this.fechaCierre);
+
+  if (this.estado === "borrador") {
+    return { disponible: false, razon: "El examen está en borrador" };
+  }
+
+  if (ahora < apertura) {
+    const diffMs = apertura - ahora;
+    const diffDias = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+    const diffHoras = Math.ceil(diffMs / (1000 * 60 * 60));
+    
+    return {
+      disponible: false,
+      razon: "Aún no disponible",
+      abreEn: diffDias > 1 ? `${diffDias} días` : `${diffHoras} horas`,
+      fechaApertura: apertura
+    };
+  }
+
+  if (ahora > cierre) {
+    return { disponible: false, razon: "El examen ya cerró", vencido: true };
+  }
+
+  // Está disponible
+  const diffMs = cierre - ahora;
+  const diffDias = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+  const diffHoras = Math.floor((diffMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+
+  return {
+    disponible: true,
+    cierraEn: diffDias > 0 ? `${diffDias} días y ${diffHoras} horas` : `${diffHoras} horas`,
+    fechaCierre: cierre
+  };
+});
+
+// =============================================
+// MÉTODO: Sincronizar estado de un examen
+// =============================================
+examenSchema.methods.sincronizarEstado = function () {
+  const estadoAnterior = this.estado;
+  const nuevoEstado = this.estadoCalculado;
+
+  // Solo actualizar si cambió y no es borrador
+  if (estadoAnterior !== nuevoEstado && estadoAnterior !== "borrador") {
+    this.estado = nuevoEstado;
+    return true; // Indica que hubo cambio
+  }
+
+  return false;
+};
+
+// =============================================
+// MÉTODO ESTÁTICO: Actualizar estados de todos los exámenes
+// =============================================
+examenSchema.statics.actualizarEstados = async function () {
+  const ahora = new Date();
+  
+  // Cerrar exámenes publicados cuya fecha de cierre ya pasó
+  const resultado = await this.updateMany(
+    {
+      estado: "publicado",
+      fechaCierre: { $lt: ahora }
+    },
+    {
+      $set: { estado: "cerrado" }
+    }
+  );
+
+  return resultado.modifiedCount;
+};
+
+// =============================================
+// MÉTODO ESTÁTICO: Obtener exámenes próximos a cerrar
+// =============================================
+examenSchema.statics.obtenerProximosACerrar = async function (horasAntes = 24) {
+  const ahora = new Date();
+  const limite = new Date(ahora.getTime() + horasAntes * 60 * 60 * 1000);
+
+  return await this.find({
+    estado: "publicado",
+    fechaCierre: {
+      $gte: ahora,
+      $lte: limite
+    }
+  }).populate("curso", "titulo codigo alumnos");
+};
+
+// =============================================
+// MÉTODO ESTÁTICO: Obtener exámenes próximos a abrir
+// =============================================
+examenSchema.statics.obtenerProximosAAbrir = async function (horasAntes = 24) {
+  const ahora = new Date();
+  const limite = new Date(ahora.getTime() + horasAntes * 60 * 60 * 1000);
+
+  return await this.find({
+    estado: "publicado",
+    fechaApertura: {
+      $gte: ahora,
+      $lte: limite
+    }
+  }).populate("curso", "titulo codigo alumnos");
+};
+
+// =============================================
+// MÉTODOS EXISTENTES (sin cambios)
+// =============================================
 
 // Calcular puntaje total del examen
 examenSchema.methods.calcularPuntajeTotal = function() {
@@ -184,12 +329,16 @@ examenSchema.methods.puedeRealizarExamen = function(alumnoId) {
   const ahora = new Date();
   
   // Verificar si está dentro del período
-  if (ahora < this.fechaApertura || ahora > this.fechaCierre) {
-    return { puede: false, razon: "Fuera del período permitido" };
+  if (ahora < this.fechaApertura) {
+    return { puede: false, razon: "El examen aún no está disponible" };
+  }
+  
+  if (ahora > this.fechaCierre) {
+    return { puede: false, razon: "El examen ya cerró" };
   }
 
-  // Verificar estado
-  if (this.estado !== "publicado") {
+  // Verificar estado (usar estadoCalculado para mayor precisión)
+  if (this.estadoCalculado !== "publicado") {
     return { puede: false, razon: "El examen no está disponible" };
   }
 
@@ -218,17 +367,21 @@ examenSchema.methods.actualizarEstadisticas = function() {
   this.estadisticas.totalIntentos = intentosCalificados.length;
   
   if (intentosCalificados.length > 0) {
-    const suma = intentosCalificados.reduce((sum, i) => sum + i.porcentaje, 0);
+    const suma = intentosCalificados.reduce((sum, i) => sum + parseFloat(i.porcentaje), 0);
     this.estadisticas.promedioGeneral = (suma / intentosCalificados.length).toFixed(2);
     
     this.estadisticas.alumnosAprobados = intentosCalificados.filter(
-      i => i.porcentaje >= this.configuracion.notaAprobacion
+      i => parseFloat(i.porcentaje) >= this.configuracion.notaAprobacion
     ).length;
     
     this.estadisticas.alumnosReprobados = intentosCalificados.filter(
-      i => i.porcentaje < this.configuracion.notaAprobacion
+      i => parseFloat(i.porcentaje) < this.configuracion.notaAprobacion
     ).length;
   }
 };
+
+// Configurar virtuals para JSON
+examenSchema.set("toJSON", { virtuals: true });
+examenSchema.set("toObject", { virtuals: true });
 
 export default mongoose.model("Examen", examenSchema);

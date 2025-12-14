@@ -1,4 +1,4 @@
-// routes/examenRoutes.js
+// backend/src/routes/examenRoutes.js
 import express from "express";
 import {
   crearExamen,
@@ -9,7 +9,8 @@ import {
   iniciarIntento,
   enviarRespuestas,
   calificarManualmente,
-  obtenerEstadisticas
+  obtenerEstadisticas,
+  sincronizarEstadosExamenes  // ← NUEVO
 } from "../controllers/examenController.js";
 import { auth, esDocenteOAdmin, esAlumno } from "../middlewares/authMiddleware.js";
 
@@ -29,6 +30,9 @@ router.post("/:id/calificar", auth, esDocenteOAdmin, calificarManualmente);
 
 // Estadísticas (docente/admin)
 router.get("/:id/estadisticas", auth, esDocenteOAdmin, obtenerEstadisticas);
+
+// ✅ NUEVO: Sincronizar estados manualmente
+router.post("/sincronizar-estados", auth, esDocenteOAdmin, sincronizarEstadosExamenes);
 
 // Rutas de alumno
 router.post("/:id/iniciar", auth, iniciarIntento);
