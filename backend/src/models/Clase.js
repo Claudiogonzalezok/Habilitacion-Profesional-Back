@@ -106,9 +106,22 @@ claseSchema.index({ estado: 1 });
 // MÉTODOS DE INSTANCIA
 // ============================================
 
+/**
+ * Helper para obtener la fecha ajustada sin problemas de timezone
+ * MongoDB guarda fechas como UTC (ej: 2024-12-15T00:00:00.000Z)
+ * Al convertir a local en Argentina (UTC-3), se muestra como día anterior
+ * Esta función compensa ese offset
+ */
+claseSchema.methods.obtenerFechaAjustada = function() {
+  const fechaOriginal = new Date(this.fecha);
+  // Compensar el offset del timezone para obtener la fecha "nominal"
+  return new Date(fechaOriginal.getTime() + fechaOriginal.getTimezoneOffset() * 60000);
+};
+
 // Helper para obtener fecha/hora de inicio completa
 claseSchema.methods.obtenerFechaHoraInicio = function() {
-  const fecha = new Date(this.fecha);
+  // Usar fecha ajustada para evitar problemas de timezone
+  const fecha = this.obtenerFechaAjustada();
   const [horas, minutos] = this.horaInicio.split(":");
   fecha.setHours(parseInt(horas), parseInt(minutos), 0, 0);
   return fecha;
@@ -116,7 +129,8 @@ claseSchema.methods.obtenerFechaHoraInicio = function() {
 
 // Helper para obtener fecha/hora de fin completa
 claseSchema.methods.obtenerFechaHoraFin = function() {
-  const fecha = new Date(this.fecha);
+  // Usar fecha ajustada para evitar problemas de timezone
+  const fecha = this.obtenerFechaAjustada();
   const [horas, minutos] = this.horaFin.split(":");
   fecha.setHours(parseInt(horas), parseInt(minutos), 0, 0);
   return fecha;
@@ -187,11 +201,17 @@ claseSchema.statics.obtenerProximasAIniciar = async function(minutosAntes = 15) 
   const ahora = new Date();
   const limite = new Date(ahora.getTime() + minutosAntes * 60 * 1000);
   
+  // Obtener el inicio y fin del día actual en UTC para la query
+  const inicioHoy = new Date();
+  inicioHoy.setHours(0, 0, 0, 0);
+  const finHoy = new Date();
+  finHoy.setHours(23, 59, 59, 999);
+  
   const clases = await this.find({
     estado: "programada",
     fecha: {
-      $gte: new Date(ahora.toDateString()),
-      $lte: new Date(limite.toDateString())
+      $gte: inicioHoy,
+      $lte: finHoy
     }
   }).populate("curso", "titulo codigo");
   
